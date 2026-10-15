@@ -1,0 +1,30 @@
+[package]
+name = "analog-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description.workspace = true
+
+[dependencies]
+bytemuck = "1.25.2"
+directories = "6.0.0"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff", "webp"] }
+libraw-rs = { version = "0.0.4", optional = true }
+log.workspace = true
+ort = "2.0.0-rc.14"
+pollster = "1.0.1"
+psd = "0.3.5"
+quick-xml = "0.42.0"
+serde.workspace = true
+thiserror.workspace = true
+ureq = "3.4.2"
+wgpu = "30.0.1"
+
+[dev-dependencies]
+serde_json = "1.0.154"
+
+[features]
+# Camera RAW input (CR2/NEF/ARW/DNG/...). Compiles the vendored LibRaw C++
+# library, so it needs a C++ compiler; off by default to keep builds pure Rust.
+raw = ["dep:libraw-rs"]

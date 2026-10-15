@@ -1,0 +1,8 @@
+[book]
+title = "analog"
+description = "Documentation for the analog film grain editor"
+src = "."
+
+[output.html]
+git-repository-url = "https://github.com/OWNER/analog"
+git-repository-icon = "fab-github"

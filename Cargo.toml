@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/analog-core",
+    "crates/analog-cli",
+    "crates/analog-gui",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.93"
+authors = ["analog contributors"]
+description = "A local-first film grain editor: library, CLI and GUI."
+
+[workspace.dependencies]
+anyhow = "1"
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+serde = { version = "1", features = ["derive"] }
+
+analog-core = { path = "crates/analog-core" }

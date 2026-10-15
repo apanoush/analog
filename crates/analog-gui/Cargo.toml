@@ -1,0 +1,20 @@
+[package]
+name = "analog-gui"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+description.workspace = true
+
+[dependencies]
+analog-core.workspace = true
+env_logger.workspace = true
+iced = { version = "0.14.0", features = ["image", "tokio", "canvas"] }
+log.workspace = true
+rfd = "0.17.2"
+
+[features]
+# Camera RAW input. On by default so the editor opens RAW files; needs a C++
+# compiler. Disable with `--no-default-features` for a pure-Rust build.
+default = ["raw"]
+raw = ["analog-core/raw"]
