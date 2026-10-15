@@ -7,6 +7,12 @@ authors.workspace = true
 description.workspace = true
 repository = "https://github.com/apanoush/analog"
 
+[package.metadata.wix]
+upgrade-guid = "31EC38A9-5429-4F12-B574-B80BB9AF5CDC"
+path-guid = "F8924B5C-7160-4BC3-A0E6-EA452F3E5C18"
+license = false
+eula = false
+
 [dependencies]
 analog-core.workspace = true
 anyhow.workspace = true
