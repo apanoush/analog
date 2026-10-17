@@ -42,6 +42,9 @@ jobs:
           # Used to query the GitHub Releases API without hitting the rate limit.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash site/build.sh
+      # Requires Pages to be enabled once with Source = "GitHub Actions"
+      # (Settings -> Pages). The default GITHUB_TOKEN cannot enable it, so the
+      # `enablement: true` option is deliberately not used; see site/README.md.
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

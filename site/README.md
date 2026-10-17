@@ -50,6 +50,18 @@ falls back to an outdated version.
 ## Deploy
 
 `.github/workflows/pages.yml` builds the site and deploys `site/` to GitHub
-Pages on every push to `public` (and on manual dispatch). Enable it once in the
-repository settings: **Pages -> Build and deployment -> Source -> GitHub
-Actions**.
+Pages on every push to `public` (and on manual dispatch).
+
+**One-time setup (required).** GitHub Pages must be enabled once before the
+first deploy, otherwise `actions/configure-pages` fails with
+"Get Pages site failed ... Not Found":
+
+1. Repository **Settings -> Pages**.
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**.
+
+No personal access token is needed. The workflow's `GITHUB_TOKEN` cannot enable
+Pages itself (`configure-pages`' `enablement: true` requires a separate token
+with `repo` scope, or a GitHub App with `administration:write` and
+`pages:write`), so this single toggle is done by hand. After it is set, the
+next push to `public` publishes the site at
+<https://apanoush.github.io/analog/>.
