@@ -1,0 +1,10 @@
+[env]
+# libraw-rs-sys compiles the vendored LibRaw sources as a static library, but
+# LibRaw's headers default to __declspec(dllimport) under MSVC. Without this
+# define the compiled definitions fail with C2491.
+CXXFLAGS_x86_64_pc_windows_msvc = "-DLIBRAW_NODLL"
+
+# ort-sys downloads a prebuilt ONNX Runtime whose macOS objects are compiled
+# for 13.4. Matching that deployment target lets rustc/ld link it; otherwise
+# ___isPlatformVersionAtLeast is undefined.
+MACOSX_DEPLOYMENT_TARGET = "13.4"

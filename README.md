@@ -47,6 +47,15 @@ Camera RAW input (CR2, NEF, ARW, DNG, ...) is compiled in by default and pulls
 the vendored LibRaw library, so those builds need a C++ compiler. Pass
 `--no-default-features` to the CLI or GUI for a pure-Rust build without RAW.
 
+Platform notes:
+
+- On Windows the RAW build needs the MSVC C++ build tools. `.cargo/config.toml`
+  passes `-DLIBRAW_NODLL` to the C++ compiler because LibRaw is linked
+  statically, not as a DLL.
+- On Apple Silicon the release binary requires macOS 13.4 or newer. The
+  prebuilt ONNX Runtime used by `ort` is compiled with that deployment target,
+  so `.cargo/config.toml` sets `MACOSX_DEPLOYMENT_TARGET=13.4`.
+
 In the editor, hold the **Compare (B)** control (or press the `B` / `\` key) to
 see the original photo without effects while pressed. Scroll over the photo to
 zoom in and out around the cursor, drag with the left mouse button to pan while

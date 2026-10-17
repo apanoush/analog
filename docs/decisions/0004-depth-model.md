@@ -33,6 +33,10 @@ there afterwards.
 
 - The core crate depends on `ort` and `ureq`; the build fetches ONNX Runtime
   binaries the first time.
+- The prebuilt ONNX Runtime objects for Apple Silicon are compiled with
+  `MACOSX_DEPLOYMENT_TARGET=13.4`. `.cargo/config.toml` matches that target so
+  the linker resolves `___isPlatformVersionAtLeast`; consequently the macOS
+  arm64 binary requires macOS 13.4 or newer.
 - The first focus-based render downloads ~27 MB and can block briefly; the GUI
   loads the model lazily and reports progress in its status line.
 - The image is squashed to the model's 518x518 input, an approximation

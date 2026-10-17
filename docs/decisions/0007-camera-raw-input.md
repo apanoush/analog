@@ -55,6 +55,13 @@ needs the `cc` crate plus a C++ compiler. Both wrap the same LibRaw.
 
 - RAW builds need a C++ compiler; the vendored LibRaw compiles in roughly 25 s
   on 8 cores and is cached. `--no-default-features` gives a pure-Rust build.
+- On Windows/MSVC, `libraw-rs-sys` compiles LibRaw as a static library but its
+  build script does not define `LIBRAW_NODLL`. LibRaw's headers therefore
+  declare every API symbol as `__declspec(dllimport)`
+  (`libraw/libraw/libraw_types.h:102-114` in the vendored source), and
+  defining them fails with C2491. `.cargo/config.toml` passes
+  `-DLIBRAW_NODLL` through `CXXFLAGS_x86_64_pc_windows_msvc` to select a static
+  build.
 - LibRaw is LGPL-2.1 (CDDL dual). The `libraw-rs` wrapper is MIT, but the linked
   LibRaw library keeps its own licence; downstream distributors must honour it.
 - RAW input is 16-bit, so it exercises the existing 16-bit pipeline (slower

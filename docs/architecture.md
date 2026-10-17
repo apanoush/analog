@@ -170,8 +170,9 @@ like any other 16-bit input; RAW is never an output format. See
 `wgpu` targets Vulkan, Metal and DirectX 12 from one codebase; `iced` renders
 the UI, and user paths go through the `directories` crate (see the depth model).
 The GUI hides the Windows console in release builds (via `windows_subsystem`).
-The first version is developed on Linux/Vulkan and is expected to build
-elsewhere, but only Linux is exercised today.
+Development happens on Linux/Vulkan; the release workflow also builds Windows
+and Apple Silicon macOS artifacts. Platform-specific build requirements are
+recorded in `.cargo/config.toml` and the README.
 
 ## Recipes
 
