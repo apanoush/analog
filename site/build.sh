@@ -15,6 +15,15 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
+# Fail fast, with a clear message, if the toolchain is incomplete.
+for tool in pandoc mdbook curl python3; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        echo "error: required tool '$tool' not found on PATH." >&2
+        echo "       install it and retry; see site/README.md." >&2
+        exit 1
+    fi
+done
+
 repo_url="${REPO_URL:-https://github.com/apanoush/analog}"
 repo_slug="${REPO_SLUG:-${repo_url#https://github.com/}}"
 repo_slug="${repo_slug%.git}"

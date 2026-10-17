@@ -32,6 +32,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: mdbook
+      - name: Install pandoc
+        uses: r-lib/actions/setup-pandoc@v2
+        with:
+          # Pinned to match the locally built site (see site/README.md).
+          pandoc-version: '3.11'
       - name: Build site
         env:
           # Used to query the GitHub Releases API without hitting the rate limit.
