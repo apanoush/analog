@@ -34,9 +34,13 @@ there afterwards.
 - The core crate depends on `ort` and `ureq`; the build fetches ONNX Runtime
   binaries the first time.
 - The prebuilt ONNX Runtime objects for Apple Silicon are compiled with
-  `MACOSX_DEPLOYMENT_TARGET=13.4`. `.cargo/config.toml` matches that target so
-  the linker resolves `___isPlatformVersionAtLeast`; consequently the macOS
-  arm64 binary requires macOS 13.4 or newer.
+  `MACOSX_DEPLOYMENT_TARGET=13.4`, so `.cargo/config.toml` matches that target
+  and the macOS arm64 binary requires macOS 13.4 or newer.
+- Those objects use `@available`, which lowers to a call to
+  `__isPlatformVersionAtLeast` in Clang's `libclang_rt.osx.a`. Rust final-links
+  with `-nodefaultlibs` and therefore does not add compiler-rt automatically;
+  `crates/analog-core/build.rs` locates the active toolchain's archive with
+  `clang -print-resource-dir` and links it explicitly.
 - The first focus-based render downloads ~27 MB and can block briefly; the GUI
   loads the model lazily and reports progress in its status line.
 - The image is squashed to the model's 518x518 input, an approximation

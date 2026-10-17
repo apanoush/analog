@@ -172,7 +172,7 @@ the UI, and user paths go through the `directories` crate (see the depth model).
 The GUI hides the Windows console in release builds (via `windows_subsystem`).
 Development happens on Linux/Vulkan; the release workflow also builds Windows
 and Apple Silicon macOS artifacts. Platform-specific build requirements are
-recorded in `.cargo/config.toml` and the README.
+recorded in `.cargo/config.toml`, `crates/analog-core/build.rs` and the README.
 
 ## Recipes
 

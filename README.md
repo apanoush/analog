@@ -55,6 +55,10 @@ Platform notes:
 - On Apple Silicon the release binary requires macOS 13.4 or newer. The
   prebuilt ONNX Runtime used by `ort` is compiled with that deployment target,
   so `.cargo/config.toml` sets `MACOSX_DEPLOYMENT_TARGET=13.4`.
+- macOS builds link the active Clang runtime (`libclang_rt.osx.a`) from
+  `crates/analog-core/build.rs`. Rust final-links with `-nodefaultlibs`, and
+  the prebuilt ONNX Runtime's CoreML objects need
+  `__isPlatformVersionAtLeast` from compiler-rt.
 
 In the editor, hold the **Compare (B)** control (or press the `B` / `\` key) to
 see the original photo without effects while pressed. Scroll over the photo to
