@@ -51,7 +51,9 @@ Platform notes:
 
 - On Windows the RAW build needs the MSVC C++ build tools. `.cargo/config.toml`
   passes `-DLIBRAW_NODLL` to the C++ compiler because LibRaw is linked
-  statically, not as a DLL.
+  statically, not as a DLL. Release builds use the dynamic MSVC runtime (/MD)
+  to match the prebuilt ONNX Runtime, so the installed app needs the
+  Microsoft Visual C++ 2015-2022 Redistributable (x64).
 - On Apple Silicon the release binary requires macOS 13.4 or newer. The
   prebuilt ONNX Runtime used by `ort` is compiled with that deployment target,
   so `.cargo/config.toml` sets `MACOSX_DEPLOYMENT_TARGET=13.4`.

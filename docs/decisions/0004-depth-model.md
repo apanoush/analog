@@ -41,6 +41,11 @@ there afterwards.
   with `-nodefaultlibs` and therefore does not add compiler-rt automatically;
   `crates/analog-core/build.rs` locates the active toolchain's archive with
   `clang -print-resource-dir` and links it explicitly.
+- The prebuilt ONNX Runtime for Windows uses the dynamic MSVC runtime (/MD).
+  Release builds therefore set `msvc-crt-static = false` in
+  `dist-workspace.toml`; the alternative static CRT (/MT) fails with LNK2038
+  and unresolved `__imp_*` UCRT symbols. The Windows installer requires the
+  Microsoft Visual C++ 2015-2022 Redistributable (x64) on the target machine.
 - The first focus-based render downloads ~27 MB and can block briefly; the GUI
   loads the model lazily and reports progress in its status line.
 - The image is squashed to the model's 518x518 input, an approximation

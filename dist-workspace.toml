@@ -11,6 +11,10 @@ ci = "github"
 installers = ["msi"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
+# The prebuilt ONNX Runtime linked by ort-sys uses the dynamic MSVC runtime
+# (/MD). Using dist's default static CRT (/MT) makes the link fail with
+# LNK2038 and unresolved __imp_* UCRT symbols, so match ort and use /MD.
+msvc-crt-static = false
 
 # The ONNX Runtime binaries that ort-sys downloads require glibc >= 2.38 and a
 # GCC 11+ libstdc++, which the older default Linux runner lacks; build on 24.04.
