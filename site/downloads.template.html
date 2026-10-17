@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Downloads - analog</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="bar">
+    <a class="brand" href="./">analog</a>
+    <nav class="site-nav">
+      <a href="./">Home</a>
+      <a href="./downloads.html" aria-current="page">Downloads</a>
+      <a href="./docs/index.html">Documentation</a>
+      <a href="{{REPO_URL}}">Repository</a>
+    </nav>
+  </div>
+</header>
+<main class="page">
+  <article class="markdown-body">
+    <h1 id="downloads">Downloads</h1>
+    <p class="release-meta">
+      Latest release <strong>{{RELEASE_TAG}}</strong>
+      <span class="dot">&middot;</span>
+      <a href="{{RELEASE_URL}}">release notes on GitHub</a>
+      <span class="dot">&middot;</span>
+      published {{RELEASE_DATE}}
+    </p>
+    {{DOWNLOADS}}
+    <h2 id="verifying">Verifying downloads</h2>
+    <p>Each package ships with a matching <code>.sha256</code> file. On Linux or
+      macOS, verify it with <code>sha256sum -c &lt;file&gt;.sha256</code>; on
+      Windows, compare the hash from <code>Get-FileHash</code> against the file.</p>
+  </article>
+</main>
+<footer class="site-footer">
+  <p>analog &middot; a local-first film grain editor</p>
+</footer>
+</body>
+</html>

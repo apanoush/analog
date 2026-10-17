@@ -1,0 +1,57 @@
+# This workflow builds the static project site (see site/README.md) and
+# publishes it to GitHub Pages.
+#
+# One-time setup: in the repository settings, set Pages -> Build and deployment
+# -> Source to "GitHub Actions". The site is then live at
+# https://apanoush.github.io/analog/ after the next push to `public`.
+
+name: Pages
+
+on:
+  push:
+    branches:
+      - public
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment, never cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install mdbook
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook
+      - name: Build site
+        env:
+          # Used to query the GitHub Releases API without hitting the rate limit.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash site/build.sh
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

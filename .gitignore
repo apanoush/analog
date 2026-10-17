@@ -1,6 +1,8 @@
 # Build artifacts
 /target
 **/*.rs.bk
+__pycache__/
+*.pyc
 
 # Generated outputs
 /results/
