@@ -15,3 +15,4 @@
 - [0009: Grain type codes and defaults](decisions/0009-grain-type-codes.md)
 - [0010: Resolution-normalised grain](decisions/0010-resolution-normalised-grain.md)
 - [0011: Adaptive grain response and luminance-preserving chroma](decisions/0011-adaptive-grain-response.md)
+- [0012: Cheap grain fusion approximation](decisions/0012-cheap-grain-fusion.md)

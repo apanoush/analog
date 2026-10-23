@@ -711,7 +711,7 @@ fn grain_section(app: &App) -> Element<'_, Message> {
             &grain_color_ramp()
         ),
         slider_row(
-            "Grain Fusion",
+            "Clumping",
             0.0..=100.0,
             app.recipe.grain.dissolution_amount,
             Message::GrainFusion

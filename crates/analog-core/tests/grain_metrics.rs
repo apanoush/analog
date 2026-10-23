@@ -40,6 +40,22 @@ fn wedge_image(width: u32, height: u32) -> Image {
     Image::from_rgba8(width, height, data).unwrap()
 }
 
+/// Two midtone halves with a hard vertical edge. The two corner pixels pin the
+/// luminance range to 0..1 so both halves land in the mids zone.
+fn edge_image(width: u32, height: u32) -> Image {
+    let mut data = Vec::with_capacity((width * height * 4) as usize);
+    for _y in 0..height {
+        for x in 0..width {
+            let v = if x < width / 2 { 102 } else { 153 };
+            data.extend_from_slice(&[v, v, v, 255]);
+        }
+    }
+    // Pin the adaptive range.
+    data[0..4].copy_from_slice(&[0, 0, 0, 255]);
+    data[4..8].copy_from_slice(&[255, 255, 255, 255]);
+    Image::from_rgba8(width, height, data).unwrap()
+}
+
 /// Fine, small, low softness: the closest current approximation of the target
 /// look before the new generator lands.
 fn metric_recipe() -> Recipe {
@@ -86,6 +102,22 @@ fn chroma_mean(image: &Image) -> f32 {
 
 fn mean_luma(image: &Image) -> f32 {
     luma8(image).iter().sum::<f32>() / (image.width() * image.height()) as f32
+}
+
+/// RMS of `output - input` luma in a horizontal region, which isolates grain
+/// from the base image.
+fn difference_rms(output: &Image, input: &Image, x0: u32, x1: u32) -> f32 {
+    let width = output.width() as usize;
+    let height = output.height() as usize;
+    let out = luma8(output);
+    let src = luma8(input);
+    let mut values = Vec::new();
+    for y in 2..height - 2 {
+        for x in x0 as usize..x1 as usize {
+            values.push(out[y * width + x] - src[y * width + x]);
+        }
+    }
+    rms(&values)
 }
 
 /// Subtract the region mean. On a flat patch every remaining variation is
@@ -308,6 +340,20 @@ fn report_grain_metrics() {
     assert!(
         luma_shift < 1.0,
         "chroma deviations shifted luminance by {luma_shift:.2}/255"
+    );
+
+    // Edge-aware amplitude: grain on a hard edge must be lower than on a flat
+    // midtone region of the same image.
+    let edge_src = edge_image(pw, ph);
+    let edge_out = renderer
+        .render(&ctx, &edge_src, &metric_recipe(), None)
+        .unwrap();
+    let flat_band = difference_rms(&edge_out, &edge_src, 40, 200);
+    let edge_band = difference_rms(&edge_out, &edge_src, pw / 2 - 1, pw / 2 + 1);
+    println!("grain rms: flat {flat_band:.2}/255, edge {edge_band:.2}/255");
+    assert!(
+        edge_band < flat_band * 0.92,
+        "grain on an edge should be reduced: flat {flat_band:.2}, edge {edge_band:.2}"
     );
 }
 

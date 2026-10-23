@@ -306,6 +306,19 @@ mod tests {
     }
 
     #[test]
+    fn clumping_changes_the_grain() {
+        let Some(ctx) = ctx_or_skip() else { return };
+        let img = sample_image(32, 32);
+        let mut clean = recipe_with(80.0, 42);
+        clean.grain.dissolution_amount = 0.0;
+        let mut clumped = clean.clone();
+        clumped.grain.dissolution_amount = 100.0;
+        let a = crate::render::render(&ctx, &img, &clean).unwrap();
+        let b = crate::render::render(&ctx, &img, &clumped).unwrap();
+        assert_ne!(a, b, "clumping should change density and blend");
+    }
+
+    #[test]
     fn reference_size_changes_the_grain() {
         let Some(ctx) = ctx_or_skip() else { return };
         let img = sample_image(64, 48);

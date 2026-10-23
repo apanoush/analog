@@ -73,8 +73,11 @@ The grain is a three-stage GPU pipeline (`scatter`, `blur`,
   grain field, half-width 1-8 px at the 3000 px reference and scaled by
   the processing size; `roughness` below 5 leaves the field sharp. The
   composite compensates a little of the contrast lost to the blur.
-- **Dissolution**: clumps the field. Dust and scratches are gone; structural
-  grain fusion is planned as a separate base-image scatter pass.
+- **Clumping**: `dissolution` modulates density with a low-frequency field and
+  mixes up to 25 percent of the grain through soft light. Structural scatter is
+  not implemented; the slider is labelled Clumping.
+- **Edges**: grain amplitude drops by up to 30 percent on strong luma edges,
+  which keeps micro-detail readable without a base-image scatter pass.
 - **Focus**: with a depth map, in-focus pixels use the sharp field and defocused
   pixels use the blurred field, mixed by `depth_of_field_intensity`.
 

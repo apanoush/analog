@@ -22,8 +22,8 @@ Bump `SCHEMA_VERSION` to 2 and align the wire codes with the settings schema:
   a missing version is treated as 1;
 - fresh defaults become Fine, size 30, softness 15, colour 16, highlights 25,
   mids 38, shadows 64;
-- Grain Fusion no longer adds dust specks and scratches; those were a separate
-  effect, not fusion.
+- The slider now called Clumping no longer adds dust specks and scratches;
+  those were a separate effect.
 
 ## Migration
 
