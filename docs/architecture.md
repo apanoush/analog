@@ -54,16 +54,19 @@ The grain is a three-stage GPU pipeline (`scatter`, `blur`,
 - **Noise**: an integer hash (Wellons' lowbias32) over a lattice, bilinearly
   interpolated, two octaves. Integer hashing is what makes a `grain_seed`
   reproducible across backends.
-- **Size**: `grain_amount` and `grain_type` set the noise feature size in pixels
-  (coarse 3-12 px, smooth 2.5-10 px, fine 1-4 px).
+- **Size**: `grain_amount` and `grain_type` set the noise feature size in
+  reference pixels at a 3000 px long side (coarse 0.75-6 px, smooth 0.6-6.8 px,
+  fine 0.3-3.4 px). Coordinates are normalised to `min(3000, source_long_side)`
+  so a preview proxy can match the full-resolution export at fit.
 - **Zones**: `luminance_shadows/mids/highlights` scale three overlapping
   smoothstep weights over luma, fading to zero at the deep shadows and near
   white.
 - **Color**: per-channel noise offsets, blended toward monochrome by
   `grain_color` and directed by `color_shift`.
-- **Softness**: a separable box blur (horizontal then vertical) of the grain
-  field, radius from `roughness`; the composite applies a mild contrast
-  compensation because the field is already low-frequency.
+- **Softness**: a separable Gaussian (horizontal then vertical) of the 16-bit
+  grain field, half-width 1-8 px at the 3000 px reference and scaled by
+  the processing size; `roughness` below 5 leaves the field sharp. The
+  composite compensates a little of the contrast lost to the blur.
 - **Dissolution**: clumps the field. Dust and scratches are gone; structural
   grain fusion is planned as a separate base-image scatter pass.
 - **Focus**: with a depth map, in-focus pixels use the sharp field and defocused
@@ -127,8 +130,9 @@ high-performance preference. `passes::GpuImage` is a pixel buffer that lives on
 the GPU; `passes::ImageComputePass::run_gpu` takes `&GpuImage` inputs and returns
 a `GpuImage` with no readback, and `GpuImage::read` is the single synchronisation
 point. `Renderer::render` uploads the source once, chains the passes on the GPU,
-and reads back once. Passes compile lazily on first use, and only the pixel
-format actually used (see
+and reads back once. `Renderer::render_with_reference` does the same but takes
+the source image's long side, which proxy previews need for grain normalisation.
+Passes compile lazily on first use, and only the pixel format actually used (see
 [`decisions/0005-gpu-resident-pipeline.md`](decisions/0005-gpu-resident-pipeline.md)).
 
 ## Determinism
@@ -150,8 +154,10 @@ On the GPU each pixel is packed into `u32` words: one word for `Rgba8`
 (`r | g<<8 | b<<16 | a<<24`), two for `Rgba16` (`r | g<<16`, `b | a<<16`).
 Shaders that read or write the image declare `//@IMAGE_LOAD` / `//@IMAGE_STORE`
 markers, and `shaders::image_shader` substitutes the 8- or 16-bit implementation
-when the pipeline is compiled; each such pass holds both variants. Auxiliary
-buffers (grain field, bloom chain, depth map) are always 8-bit.
+when the pipeline is compiled; each such pass holds both variants. The optional
+`//@DITHER` marker adds half an 8-bit step of deterministic dither for 8-bit
+output and compiles to zero for 16-bit output. The depth map and bloom chain are
+8-bit; the grain field is 16-bit.
 
 `Renderer::render` preserves the input depth: an 8-bit source produces 8-bit
 output and a 16-bit source produces 16-bit output.

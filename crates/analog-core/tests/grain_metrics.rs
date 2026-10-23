@@ -166,8 +166,8 @@ fn downsample(image: &Image, factor: u32) -> Image {
     Image::from_rgba8(w, h, out).unwrap()
 }
 
-/// The pre-Phase-1 defaults, kept in the harness so the improvement stays
-/// measurable.
+/// Coarse reference: the old default type and slider values under the new
+/// mapping, kept so the size/softness change stays measurable.
 fn legacy_recipe() -> Recipe {
     Recipe {
         grain_seed: SEED,
@@ -191,7 +191,7 @@ fn report_grain_metrics() {
     let Some(ctx) = ctx_or_skip() else { return };
     let renderer = Renderer::new();
 
-    report_recipe(&ctx, &renderer, "legacy coarse defaults", &legacy_recipe());
+    report_recipe(&ctx, &renderer, "coarse reference", &legacy_recipe());
     report_recipe(&ctx, &renderer, "shipped defaults", &Recipe::default());
     report_recipe(&ctx, &renderer, "fine calibration", &metric_recipe());
 
@@ -201,19 +201,33 @@ fn report_grain_metrics() {
     let (ew, eh) = (1800, 1200);
     let recipe = metric_recipe();
     let flat = flat_image(pw, ph, 128);
-    let preview = renderer.render(&ctx, &flat, &recipe, None).unwrap();
+    let preview = renderer
+        .render_with_reference(&ctx, &flat, &recipe, None, Some(ew))
+        .unwrap();
     let export = renderer
         .render(&ctx, &flat_image(ew, eh, 128), &recipe, None)
         .unwrap();
     let export_small = downsample(&export, 3);
     let preview_luma = luma8(&preview);
     let export_luma = luma8(&export_small);
+    let preview_res = residual(&preview_luma, pw, 2, ph as usize - 2);
+    let export_res = residual(&export_luma, pw, 2, ph as usize - 2);
     let diff: f32 = preview_luma
         .iter()
         .zip(&export_luma)
         .map(|(a, b)| (a - b).abs())
         .sum::<f32>()
         / preview_luma.len() as f32;
+    println!(
+        "preview rms = {:.2}/255, half-width = {:.2} px",
+        rms(&preview_res),
+        autocorr_half_width(&preview_res, pw, ph - 4)
+    );
+    println!(
+        "export/3 rms = {:.2}/255, half-width = {:.2} px",
+        rms(&export_res),
+        autocorr_half_width(&export_res, pw, ph - 4)
+    );
     println!("preview vs downscaled export: mean |diff| = {diff:.3}/255");
 }
 

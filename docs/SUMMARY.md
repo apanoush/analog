@@ -13,3 +13,4 @@
 - [0007: Camera RAW input](decisions/0007-camera-raw-input.md)
 - [0008: Recipe preset format](decisions/0008-recipe-format.md)
 - [0009: Grain type codes and defaults](decisions/0009-grain-type-codes.md)
+- [0010: Resolution-normalised grain](decisions/0010-resolution-normalised-grain.md)

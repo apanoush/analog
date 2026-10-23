@@ -1,9 +1,11 @@
 //! The Grain block.
 //!
-//! A three-stage pipeline: `scatter` generates the deterministic grain field,
-//! `blur` (separable box, horizontal then vertical) softens it, and `apply`
-//! composites it with adaptive luminance zones and depth-based focus control.
-//! The integer-hash noise means a given `grain_seed` reproduces identical grain.
+//! A three-stage pipeline: `scatter` generates the deterministic 16-bit grain
+//! field, `blur` (separable Gaussian, horizontal then vertical) softens it, and
+//! `apply` composites it with adaptive luminance zones and depth-based focus
+//! control. Sizes and softness are normalised to a 3000 px reference so a proxy
+//! preview matches the full-resolution export. The integer-hash noise means a
+//! given `grain_seed` reproduces identical grain.
 
 use crate::error::Result;
 use crate::gpu::GpuContext;
@@ -11,8 +13,13 @@ use crate::image::{Image, PixelFormat};
 use crate::params::{GrainParams, GrainType};
 use crate::passes::{GpuImage, ImagePassPair, LazyPass};
 
-/// Maximum box-blur half-width for the softness control.
-const MAX_BLUR_RADIUS: f32 = 12.0;
+/// Maximum Gaussian half-width for the softness control, in processing pixels
+/// at a 3000 px reference. Larger images scale the radius up.
+const MAX_BLUR_RADIUS: f32 = 8.0;
+/// Softness values below this leave the field sharp.
+const SOFTNESS_FLOOR: f32 = 5.0;
+/// Long side used to normalise grain size and softness.
+const GRAIN_REFERENCE: f32 = 3000.0;
 
 /// The grain pipeline, reusable across images.
 pub struct GrainPass {
@@ -36,6 +43,11 @@ impl GrainPass {
 
     /// Apply grain to `image`.
     ///
+    /// `reference_long_side` is the long side of the source image when `image`
+    /// is a preview proxy. Grain and softness are normalised to a 3000 px
+    /// reference, so passing the source size makes the proxy match the export.
+    /// When `None`, the processed image's own long side is used.
+    ///
     /// When `depth` is `Some`, `depth_of_field_intensity` keeps in-focus areas
     /// sharp and softens defocused areas; when `None`, that control is ignored.
     pub fn run(
@@ -45,6 +57,7 @@ impl GrainPass {
         params: &GrainParams,
         seed: u64,
         depth: Option<&GpuImage>,
+        reference_long_side: Option<u32>,
     ) -> Result<GpuImage> {
         let (w, h) = (image.width(), image.height());
         let depth_intensity = if depth.is_some() {
@@ -52,46 +65,60 @@ impl GrainPass {
         } else {
             0.0
         };
-        let radius = (params.roughness / 100.0 * MAX_BLUR_RADIUS).round() as u32;
+        let max_dim = w.max(h) as f32;
+        let depth_active = depth.is_some() && params.depth_of_field_intensity > 0.0;
+        let radius = if params.roughness < SOFTNESS_FLOOR && !depth_active {
+            0
+        } else {
+            let scale = max_dim / GRAIN_REFERENCE;
+            let base = 1.0 + (MAX_BLUR_RADIUS - 1.0) * (params.roughness / 100.0);
+            (base * scale).round().clamp(1.0, 20.0) as u32
+        };
+        let reference = reference_long_side.unwrap_or(w.max(h));
 
-        let uniform = GrainUniform::new(w, h, params, seed, depth_intensity, radius);
+        let uniform = GrainUniform::new(w, h, params, seed, depth_intensity, radius, reference);
         let bytes = uniform.as_bytes();
 
-        // 1. Scatter the grain field (8-bit).
+        // 1. Scatter the grain field (16-bit).
         let field = self.scatter.select(ctx, image.format()).run_gpu(
             ctx,
             &[image],
             w,
             h,
-            PixelFormat::Rgba8,
+            PixelFormat::Rgba16,
             bytes,
         )?;
 
-        // 2. Separable box blur.
-        let blur = self.blur.get(ctx);
-        let horizontal = blur.run_gpu(
-            ctx,
-            &[&field],
-            w,
-            h,
-            PixelFormat::Rgba8,
-            bytemuck::cast_slice(&blur_uniform(w, h, radius, 0)),
-        )?;
-        let blurred = blur.run_gpu(
-            ctx,
-            &[&horizontal],
-            w,
-            h,
-            PixelFormat::Rgba8,
-            bytemuck::cast_slice(&blur_uniform(w, h, radius, 1)),
-        )?;
+        // 2. Separable Gaussian blur, skipped when the field is sharp.
+        let blurred = if radius == 0 {
+            None
+        } else {
+            let blur = self.blur.get(ctx);
+            let horizontal = blur.run_gpu(
+                ctx,
+                &[&field],
+                w,
+                h,
+                PixelFormat::Rgba16,
+                bytemuck::cast_slice(&blur_uniform(w, h, radius, 0)),
+            )?;
+            Some(blur.run_gpu(
+                ctx,
+                &[&horizontal],
+                w,
+                h,
+                PixelFormat::Rgba16,
+                bytemuck::cast_slice(&blur_uniform(w, h, radius, 1)),
+            )?)
+        };
 
         // 3. Composite (with an optional depth map).
         let dummy = GpuImage::upload(ctx, &Image::from_rgba8(1, 1, vec![255, 255, 255, 255])?)?;
         let depth_ref = depth.unwrap_or(&dummy);
+        let blurred_ref = blurred.as_ref().unwrap_or(&field);
         self.apply.select(ctx, image.format()).run_gpu(
             ctx,
-            &[image, &field, &blurred, depth_ref],
+            &[image, &field, blurred_ref, depth_ref],
             w,
             h,
             image.format(),
@@ -122,6 +149,7 @@ impl GrainUniform {
         seed: u64,
         depth_intensity: f32,
         blur_radius: u32,
+        reference_long_side: u32,
     ) -> Self {
         let grain_type = match p.grain_type {
             GrainType::Coarse => 0,
@@ -146,7 +174,7 @@ impl GrainUniform {
             grain_type,
             depth_intensity.to_bits(),
             blur_radius,
-            0,
+            reference_long_side,
             0,
             0,
         ])
@@ -240,6 +268,22 @@ mod tests {
         let a = crate::render::render(&ctx, &img, &sharp).unwrap();
         let b = crate::render::render(&ctx, &img, &soft).unwrap();
         assert_ne!(a, b, "softness should change the grain");
+    }
+
+    #[test]
+    fn reference_size_changes_the_grain() {
+        let Some(ctx) = ctx_or_skip() else { return };
+        let img = sample_image(64, 48);
+        let recipe = recipe_with(80.0, 42);
+        let renderer = crate::render::Renderer::new();
+        let native = renderer.render(&ctx, &img, &recipe, None).unwrap();
+        let proxy = renderer
+            .render_with_reference(&ctx, &img, &recipe, None, Some(6000))
+            .unwrap();
+        assert_ne!(
+            native, proxy,
+            "a different source long side must change the normalised grain size"
+        );
     }
 
     #[test]

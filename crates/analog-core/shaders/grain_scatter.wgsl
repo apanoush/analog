@@ -25,7 +25,9 @@ struct Params {
     grain_type: u32,
     depth_intensity: f32,
     blur_radius: u32,
-    pad0: u32,
+    /// Long side of the source image. Grain coordinates are normalised to this
+    /// so a 900 px preview matches the full-resolution export at fit.
+    original_long_side: u32,
     pad1: u32,
     pad2: u32,
 };
@@ -79,12 +81,12 @@ fn fbm(p: vec2<f32>, seed: u32) -> f32 {
 
 //@IMAGE_LOAD
 
-fn pack_rgba(c: vec4<f32>) -> u32 {
-    let r = u32(round(clamp(c.r, 0.0, 1.0) * 255.0));
-    let g = u32(round(clamp(c.g, 0.0, 1.0) * 255.0));
-    let b = u32(round(clamp(c.b, 0.0, 1.0) * 255.0));
-    let a = u32(round(clamp(c.a, 0.0, 1.0) * 255.0));
-    return r | (g << 8u) | (b << 16u) | (a << 24u);
+fn pack_rgba16(c: vec4<f32>) -> vec2<u32> {
+    let r = u32(round(clamp(c.r, 0.0, 1.0) * 65535.0));
+    let g = u32(round(clamp(c.g, 0.0, 1.0) * 65535.0));
+    let b = u32(round(clamp(c.b, 0.0, 1.0) * 65535.0));
+    let a = u32(round(clamp(c.a, 0.0, 1.0) * 65535.0));
+    return vec2<u32>(r | (g << 16u), b | (a << 16u));
 }
 
 @compute @workgroup_size(16, 16)
@@ -95,15 +97,25 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let idx = gid.y * params.width + gid.x;
 
     let amount = params.grain_amount / 100.0;
-    var cell = 3.0;
+    // Cell size in reference pixels at a 3000 px long side. Fine is the
+    // tightest; these ranges replace the old 3-12 px lattice.
+    var cell = 1.0;
     if (params.grain_type == 1u) {
-        cell = mix(2.5, 10.0, amount);
+        cell = mix(0.6, 6.8, amount);
     } else if (params.grain_type == 2u) {
-        cell = mix(1.0, 4.0, amount);
+        cell = mix(0.3, 3.4, amount);
     } else {
-        cell = mix(3.0, 12.0, amount);
+        cell = mix(0.75, 6.0, amount);
     }
-    let uv = (vec2<f32>(f32(gid.x), f32(gid.y)) + vec2<f32>(COORD_OFFSET)) / cell;
+
+    // Normalise coordinates to a 3000 px reference so grain keeps the same
+    // frame-relative size at every resolution. `original_long_side` is the
+    // source image's long side, which lets the GUI's proxy preview match the
+    // full-resolution export.
+    let max_dim = max(f32(params.width), f32(params.height));
+    let reference = min(3000.0, max(f32(params.original_long_side), 1.0));
+    let reference_pos = (vec2<f32>(f32(gid.x), f32(gid.y)) / max_dim) * reference;
+    let uv = (reference_pos + vec2<f32>(COORD_OFFSET)) / cell;
 
     let seed = params.seed_lo ^ (params.seed_hi * 0x9e3779b9u);
 
@@ -129,5 +141,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let alpha = load_image(idx).a;
     n = mix(vec3<f32>(0.5), n, alpha);
 
-    dst[idx] = pack_rgba(vec4<f32>(n, 1.0));
+    let packed = pack_rgba16(vec4<f32>(n, 1.0));
+    dst[idx * 2u] = packed.x;
+    dst[idx * 2u + 1u] = packed.y;
 }

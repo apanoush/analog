@@ -7,8 +7,10 @@
 //! given [`PixelFormat`]. The shader bodies then call `load_image(idx)` and
 //! `store_image(idx, colour)`.
 //!
-//! Auxiliary buffers (the grain field, the bloom chain, the depth map) are always
-//! 8-bit and keep their own inline loaders.
+//! Auxiliary buffers (the grain field, the bloom chain, the depth map) keep
+//! their own inline loaders; the grain field is 16-bit since Phase 2. Shaders
+//! that want output dithering mark the spot with `//@DITHER`; it is active for
+//! 8-bit output and compiled to zero for 16-bit output.
 
 use crate::image::PixelFormat;
 
@@ -48,12 +50,29 @@ const STORE16: &str = r#"fn store_image(i: u32, c: vec4<f32>) {
     dst[i * 2u + 1u] = b | (a << 16u);
 }"#;
 
-/// Substitute the image loader and storer for the given format.
+/// Half an 8-bit step of deterministic output dither, keyed by pixel index.
+const DITHER8: &str = r#"fn output_dither(i: u32) -> f32 {
+    var h = i * 0x9e3779b1u;
+    h = h ^ (h >> 16u);
+    h = h * 0x7feb352du;
+    h = h ^ (h >> 15u);
+    h = h * 0x846ca68bu;
+    h = h ^ (h >> 16u);
+    return (f32(h) * (1.0 / 4294967295.0) - 0.5) / 255.0;
+}"#;
+
+/// 16-bit output already has enough precision; dithering would only add noise.
+const DITHER16: &str = r#"fn output_dither(_i: u32) -> f32 {
+    return 0.0;
+}"#;
+
+/// Substitute the image loader, storer and output dither for the given format.
 pub fn image_shader(wgsl: &str, format: PixelFormat) -> String {
-    let (load, store) = match format {
-        PixelFormat::Rgba8 => (LOAD8, STORE8),
-        PixelFormat::Rgba16 => (LOAD16, STORE16),
+    let (load, store, dither) = match format {
+        PixelFormat::Rgba8 => (LOAD8, STORE8, DITHER8),
+        PixelFormat::Rgba16 => (LOAD16, STORE16, DITHER16),
     };
     wgsl.replace("//@IMAGE_LOAD", load)
         .replace("//@IMAGE_STORE", store)
+        .replace("//@DITHER", dither)
 }

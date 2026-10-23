@@ -25,7 +25,9 @@ struct Params {
     grain_type: u32,
     depth_intensity: f32,
     blur_radius: u32,
-    pad0: u32,
+    /// Long side of the source image; kept in the layout shared by the grain
+    /// shaders. The apply pass does not need it.
+    original_long_side: u32,
     pad1: u32,
     pad2: u32,
 };
@@ -38,7 +40,7 @@ struct Params {
 @group(0) @binding(5) var<uniform> params: Params;
 
 const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
-const GRAIN_GAIN: f32 = 0.30;
+const GRAIN_GAIN: f32 = 0.22;
 
 fn zone_weights(l: f32) -> vec3<f32> {
     let ws = smoothstep(0.05, 0.25, l) * (1.0 - smoothstep(0.25, 0.50, l));
@@ -49,14 +51,16 @@ fn zone_weights(l: f32) -> vec3<f32> {
 
 //@IMAGE_LOAD
 //@IMAGE_STORE
+//@DITHER
 
-// 8-bit loader for the auxiliary field and depth buffers.
-fn unpack8(p: u32) -> vec4<f32> {
-    let r = f32(p & 0xFFu) / 255.0;
-    let g = f32((p >> 8u) & 0xFFu) / 255.0;
-    let b = f32((p >> 16u) & 0xFFu) / 255.0;
-    let a = f32((p >> 24u) & 0xFFu) / 255.0;
-    return vec4<f32>(r, g, b, a);
+// 16-bit loader for the auxiliary grain fields. Depth stays 8-bit.
+fn unpack16(p0: u32, p1: u32) -> vec4<f32> {
+    return vec4<f32>(
+        f32(p0 & 0xFFFFu),
+        f32((p0 >> 16u) & 0xFFFFu),
+        f32(p1 & 0xFFFFu),
+        f32((p1 >> 16u) & 0xFFFFu),
+    ) / 65535.0;
 }
 
 @compute @workgroup_size(16, 16)
@@ -79,16 +83,16 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
         focus = (params.depth_intensity / 100.0) * d;
     }
 
-    let n = unpack8(sharp[idx]).rgb;
-    let b = unpack8(blurred[idx]).rgb;
+    let n = unpack16(sharp[idx * 2u], sharp[idx * 2u + 1u]).rgb;
+    let b = unpack16(blurred[idx * 2u], blurred[idx * 2u + 1u]).rgb;
     let field = mix(b, n, focus);
 
-    // Mild contrast compensation for the blur: the grain field is already
-    // low-frequency, so a full white-noise compensation would over-boost it.
-    let comp = 1.0 + 0.5 * f32(params.blur_radius) / 12.0;
+    // Mild contrast compensation for the blur, driven by the normalised
+    // softness so preview and export compensate by the same amount.
+    let comp = 1.0 + 0.25 * (params.softness / 100.0);
     let grain = (field - vec3<f32>(0.5)) * 2.0 * comp;
     let amp = (params.intensity / 100.0) * zone * GRAIN_GAIN;
-    let grained = c.rgb + grain * amp;
+    let grained = c.rgb + grain * amp + vec3<f32>(output_dither(idx));
 
     store_image(idx, vec4<f32>(grained, c.a));
 }

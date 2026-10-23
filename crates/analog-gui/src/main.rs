@@ -244,7 +244,19 @@ impl App {
             } else {
                 self.preview_depth.as_ref()
             };
-            match self.renderer.render(&self.ctx, src, &self.recipe, depth) {
+            // Grain is normalised to the source size so the proxy preview
+            // matches the full-resolution export at fit.
+            let reference = self
+                .source
+                .as_ref()
+                .map(|image| image.width().max(image.height()));
+            match self.renderer.render_with_reference(
+                &self.ctx,
+                src,
+                &self.recipe,
+                depth,
+                reference,
+            ) {
                 Ok(img) => {
                     self.preview = Some(handle_from(&img));
                 }

@@ -50,6 +50,20 @@ impl Renderer {
         recipe: &Recipe,
         depth: Option<&DepthMap>,
     ) -> Result<Image> {
+        self.render_with_reference(ctx, image, recipe, depth, None)
+    }
+
+    /// Render `image` with the source image's long side supplied for grain
+    /// normalisation. Pass the original size when `image` is a preview proxy so
+    /// the preview matches the full-resolution export at fit.
+    pub fn render_with_reference(
+        &self,
+        ctx: &GpuContext,
+        image: &Image,
+        recipe: &Recipe,
+        depth: Option<&DepthMap>,
+        reference_long_side: Option<u32>,
+    ) -> Result<Image> {
         let recipe = recipe.clone().clamped();
         if recipe.is_noop() {
             return Ok(image.clone());
@@ -71,6 +85,7 @@ impl Renderer {
                 &recipe.grain,
                 recipe.grain_seed,
                 depth_gpu.as_ref(),
+                reference_long_side,
             )?;
         }
         if recipe.halation.halation_intensity > 0.0 || recipe.halation.light_spill_intensity > 0.0 {
