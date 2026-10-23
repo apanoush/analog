@@ -8,8 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::params::{FilmParams, GrainParams, HalationParams, PrintParams};
 
-/// Current recipe schema version, mirroring `analog:schemaVersion="1"`.
-pub const SCHEMA_VERSION: u32 = 1;
+/// Current recipe schema version, mirroring `analog:schemaVersion="2"`.
+///
+/// Version 2 changed the `grainType` wire codes to match the original settings
+/// schema (0 = Fine, 1 = Coarse, 2 = Smooth). Version 1 recipes are migrated on
+/// import.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// The full set of parameters that defines a rendered look.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

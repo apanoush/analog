@@ -14,15 +14,18 @@ fn clamp_unit(v: f32) -> f32 {
 }
 
 /// Grain particle generator, exposed in the UI as Coarse / Smooth / Fine.
+///
+/// The variant order is internal. The `.analog` wire codes follow the original
+/// settings schema (Fine 0, Coarse 1, Smooth 2); see `recipe_io`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GrainType {
-    /// Internal `grainType == 0` (shipped default).
-    #[default]
+    /// Bold, visible grain.
     Coarse,
-    /// Internal `grainType == 1`.
+    /// Soft grain that dissolves into the image.
     Smooth,
-    /// Internal `grainType == 2`.
+    /// Tight, subtle grain (shipped default).
+    #[default]
     Fine,
 }
 
@@ -187,8 +190,10 @@ pub const ALL_FILM_STOCKS: [FilmStock; 19] = [
 
 /// Grain block parameters.
 ///
-/// Defaults reproduce a neutral (no grain) render except for the tonal
-/// luminance controls, which sit at their neutral value of 50.
+/// Defaults start on the fine generator, with the grain weighted toward
+/// shadows and out of the highlights, so a fresh image reads as film grain
+/// rather than coarse noise. Saved recipes carry every field, so changing the
+/// defaults does not alter existing presets.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct GrainParams {
@@ -211,14 +216,14 @@ impl Default for GrainParams {
         Self {
             grain_type: GrainType::default(),
             intensity: 50.0,
-            grain_amount: 50.0,
-            roughness: 50.0,
-            grain_color: 50.0,
+            grain_amount: 30.0,
+            roughness: 15.0,
+            grain_color: 16.0,
             color_shift: 50.0,
             dissolution_amount: 0.0,
-            luminance_highlights: 50.0,
-            luminance_mids: 50.0,
-            luminance_shadows: 50.0,
+            luminance_highlights: 25.0,
+            luminance_mids: 38.0,
+            luminance_shadows: 64.0,
             depth_of_field_intensity: 0.0,
             fine_grain_intensity: 0.0,
         }
@@ -360,11 +365,15 @@ mod tests {
     #[test]
     fn grain_defaults_match_schema() {
         let g = GrainParams::default();
-        assert_eq!(g.grain_type, GrainType::Coarse);
+        assert_eq!(g.grain_type, GrainType::Fine);
         assert_eq!(g.intensity, 50.0);
-        assert_eq!(g.grain_amount, 50.0);
-        assert_eq!(g.roughness, 50.0);
+        assert_eq!(g.grain_amount, 30.0);
+        assert_eq!(g.roughness, 15.0);
+        assert_eq!(g.grain_color, 16.0);
         assert_eq!(g.dissolution_amount, 0.0);
+        assert_eq!(g.luminance_highlights, 25.0);
+        assert_eq!(g.luminance_mids, 38.0);
+        assert_eq!(g.luminance_shadows, 64.0);
         assert_eq!(g.depth_of_field_intensity, 0.0);
     }
 

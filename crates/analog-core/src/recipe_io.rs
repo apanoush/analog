@@ -1,9 +1,13 @@
 //! `.analog` recipe import and export.
 //!
 //! An `.analog` file is an XMP packet using a custom namespace,
-//! `xmlns:analog="urn:analog:recipe:1.0"` with `analog:schemaVersion="1"`.
+//! `xmlns:analog="urn:analog:recipe:1.0"` with `analog:schemaVersion="2"`.
 //! Import also accepts a bare `.xmp`. The attribute names mirror the internal
 //! settings schema so a recipe round-trips faithfully.
+//!
+//! Schema version 1 used the internal grain-type order (0 Coarse, 1 Smooth,
+//! 2 Fine). Version 2 uses the original settings-schema codes (0 Fine,
+//! 1 Coarse, 2 Smooth); version 1 files are migrated while parsing.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -140,6 +144,7 @@ pub fn from_recipe_xmp(xml: &str) -> Result<Recipe> {
     }
 
     let mut r = Recipe::default();
+    let wire_version = get_u64(&attrs, "schemaVersion").unwrap_or(1) as u32;
     r.name = attrs
         .get("presetName")
         .map(|s| truncate_chars(s, 100))
@@ -169,6 +174,18 @@ pub fn from_recipe_xmp(xml: &str) -> Result<Recipe> {
         &mut r.grain.luminance_shadows,
         get_f32(&attrs, "luminanceShadows"),
     );
+    // Legacy single-knob recipes only carry `luminanceControl`. Resolve it the
+    // way the original settings schema did when the three explicit zones are
+    // absent.
+    let has_explicit_zones = attrs.contains_key("luminanceHighlights")
+        || attrs.contains_key("luminanceMids")
+        || attrs.contains_key("luminanceShadows");
+    if !has_explicit_zones && let Some(control) = get_f32(&attrs, "luminanceControl") {
+        let control = control.clamp(0.0, 100.0);
+        r.grain.luminance_shadows = 50.0 + 0.25 * control;
+        r.grain.luminance_mids = 50.0 - 0.225 * control;
+        r.grain.luminance_highlights = 50.0 - 0.45 * control;
+    }
     set(
         &mut r.grain.depth_of_field_intensity,
         get_f32(&attrs, "depthOfFieldIntensity"),
@@ -178,7 +195,7 @@ pub fn from_recipe_xmp(xml: &str) -> Result<Recipe> {
         get_f32(&attrs, "fineGrainIntensity"),
     );
     if let Some(code) = get_u64(&attrs, "grainType") {
-        r.grain.grain_type = grain_type_from_code(code as u32);
+        r.grain.grain_type = grain_type_from_code(code as u32, wire_version);
     }
 
     // Halation
@@ -324,17 +341,24 @@ fn truncate_chars(s: &str, max: usize) -> String {
 
 fn grain_type_code(t: GrainType) -> u32 {
     match t {
-        GrainType::Coarse => 0,
-        GrainType::Smooth => 1,
-        GrainType::Fine => 2,
+        GrainType::Fine => 0,
+        GrainType::Coarse => 1,
+        GrainType::Smooth => 2,
     }
 }
 
-fn grain_type_from_code(code: u32) -> GrainType {
+fn grain_type_from_code(code: u32, schema_version: u32) -> GrainType {
+    if schema_version < 2 {
+        return match code {
+            1 => GrainType::Smooth,
+            2 => GrainType::Fine,
+            _ => GrainType::Coarse,
+        };
+    }
     match code {
-        1 => GrainType::Smooth,
-        2 => GrainType::Fine,
-        _ => GrainType::Coarse,
+        1 => GrainType::Coarse,
+        2 => GrainType::Smooth,
+        _ => GrainType::Fine,
     }
 }
 
@@ -422,5 +446,83 @@ mod tests {
         let xml = to_recipe_xmp(&recipe);
         let back = from_recipe_xmp(&xml).unwrap();
         assert_eq!(back.name.unwrap().chars().count(), 100);
+    }
+
+    fn minimal_xmp(extra: &str) -> String {
+        format!(
+            "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\
+             <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\
+             <rdf:Description rdf:about=\"\" xmlns:analog=\"urn:analog:recipe:1.0\" {extra}/>\
+             </rdf:RDF></x:xmpmeta>"
+        )
+    }
+
+    #[test]
+    fn grain_type_codes_roundtrip() {
+        for grain_type in [GrainType::Coarse, GrainType::Smooth, GrainType::Fine] {
+            let recipe = Recipe {
+                grain: GrainParams {
+                    grain_type,
+                    ..Default::default()
+                },
+                ..Recipe::default()
+            };
+            let back = from_recipe_xmp(&to_recipe_xmp(&recipe)).unwrap();
+            assert_eq!(back.grain.grain_type, grain_type);
+        }
+    }
+
+    #[test]
+    fn schema_v1_grain_type_codes_are_migrated() {
+        // Version 1 codes: 0 Coarse, 1 Smooth, 2 Fine.
+        for (code, expected) in [
+            (0, GrainType::Coarse),
+            (1, GrainType::Smooth),
+            (2, GrainType::Fine),
+        ] {
+            let xml = minimal_xmp(&format!(
+                "analog:schemaVersion=\"1\" analog:grainType=\"{code}\""
+            ));
+            let back = from_recipe_xmp(&xml).unwrap();
+            assert_eq!(back.grain.grain_type, expected, "legacy code {code}");
+        }
+    }
+
+    #[test]
+    fn schema_v2_grain_type_codes_match_the_settings_schema() {
+        // Version 2 codes: 0 Fine, 1 Coarse, 2 Smooth.
+        for (code, expected) in [
+            (0, GrainType::Fine),
+            (1, GrainType::Coarse),
+            (2, GrainType::Smooth),
+        ] {
+            let xml = minimal_xmp(&format!(
+                "analog:schemaVersion=\"2\" analog:grainType=\"{code}\""
+            ));
+            let back = from_recipe_xmp(&xml).unwrap();
+            assert_eq!(back.grain.grain_type, expected, "code {code}");
+        }
+    }
+
+    #[test]
+    fn legacy_luminance_control_is_expanded() {
+        let xml = minimal_xmp("analog:schemaVersion=\"2\" analog:luminanceControl=\"77\"");
+        let back = from_recipe_xmp(&xml).unwrap();
+        assert!((back.grain.luminance_shadows - 69.25).abs() < 0.001);
+        assert!((back.grain.luminance_mids - 32.675).abs() < 0.001);
+        assert!((back.grain.luminance_highlights - 15.35).abs() < 0.001);
+    }
+
+    #[test]
+    fn explicit_zones_win_over_luminance_control() {
+        let xml = minimal_xmp(
+            "analog:schemaVersion=\"2\" analog:luminanceControl=\"100\" \
+             analog:luminanceHighlights=\"11\" analog:luminanceMids=\"22\" \
+             analog:luminanceShadows=\"33\"",
+        );
+        let back = from_recipe_xmp(&xml).unwrap();
+        assert_eq!(back.grain.luminance_highlights, 11.0);
+        assert_eq!(back.grain.luminance_mids, 22.0);
+        assert_eq!(back.grain.luminance_shadows, 33.0);
     }
 }

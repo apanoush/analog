@@ -118,24 +118,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let hf = value_noise(uv * 3.0, seed ^ 0x9e3779b9u) - 0.5;
     n = n + vec3<f32>(hf) * (params.fine_grain / 100.0) * 0.5;
 
-    // Dissolution clumps the grain with a low-frequency field.
+    // Dissolution clumps the grain with a low-frequency field. Dust and
+    // scratches are not part of the grain field; structural fusion is handled
+    // separately once it is reimplemented.
     let clump = fbm(uv * 0.25, seed ^ 0xdeadbeefu);
     let clump_mod = mix(1.0, clump * 2.0, params.dissolution / 100.0);
     n = vec3<f32>(0.5) + (n - vec3<f32>(0.5)) * clump_mod;
-
-    // Dust specks above 10 and scratches above 20.
-    if (params.dissolution > 10.0) {
-        let density = (params.dissolution - 10.0) / 100.0 * 0.01;
-        if (hash2(i32(gid.x), i32(gid.y), seed ^ 0x51u) < density) {
-            n = vec3<f32>(1.0);
-        }
-    }
-    if (params.dissolution > 20.0) {
-        let scratch = value_noise(vec2<f32>(f32(gid.x) * 6.0, f32(gid.y) * 0.08), seed ^ 0x77u);
-        if (scratch > 0.996) {
-            n = vec3<f32>(0.0);
-        }
-    }
 
     // Transparent pixels carry no grain (the image is read for its alpha).
     let alpha = load_image(idx).a;

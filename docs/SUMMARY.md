@@ -12,3 +12,4 @@
 - [0006: Zoom and pan in the preview](decisions/0006-gui-zoom-pan.md)
 - [0007: Camera RAW input](decisions/0007-camera-raw-input.md)
 - [0008: Recipe preset format](decisions/0008-recipe-format.md)
+- [0009: Grain type codes and defaults](decisions/0009-grain-type-codes.md)

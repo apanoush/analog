@@ -64,8 +64,8 @@ The grain is a three-stage GPU pipeline (`scatter`, `blur`,
 - **Softness**: a separable box blur (horizontal then vertical) of the grain
   field, radius from `roughness`; the composite applies a mild contrast
   compensation because the field is already low-frequency.
-- **Dissolution**: clumps the field and, above 10 and 20, adds dust specks and
-  scratches.
+- **Dissolution**: clumps the field. Dust and scratches are gone; structural
+  grain fusion is planned as a separate base-image scatter pass.
 - **Focus**: with a depth map, in-focus pixels use the sharp field and defocused
   pixels use the blurred field, mixed by `depth_of_field_intensity`.
 
