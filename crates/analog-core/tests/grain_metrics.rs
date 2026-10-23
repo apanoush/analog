@@ -186,17 +186,43 @@ fn legacy_recipe() -> Recipe {
     }
 }
 
+/// Metrics for one recipe on a flat patch and a five-step wedge.
+#[derive(Debug, Clone, Copy)]
+struct Report {
+    rms: f32,
+    half_width: f32,
+    /// Residual RMS per wedge band, from luma 0.1 to 0.9.
+    bands: [f32; 5],
+}
+
 #[test]
 fn report_grain_metrics() {
     let Some(ctx) = ctx_or_skip() else { return };
     let renderer = Renderer::new();
 
     report_recipe(&ctx, &renderer, "coarse reference", &legacy_recipe());
-    report_recipe(&ctx, &renderer, "shipped defaults", &Recipe::default());
+    let defaults = report_recipe(&ctx, &renderer, "shipped defaults", &Recipe::default());
     report_recipe(&ctx, &renderer, "fine calibration", &metric_recipe());
 
-    // Preview versus export. The current model has no resolution
-    // normalisation, so the two are expected to disagree until Phase 2.
+    assert!(
+        (0.3..1.5).contains(&defaults.half_width),
+        "default grain half-width {:.2} px is outside the fine range",
+        defaults.half_width
+    );
+    assert!(
+        defaults.rms > 0.5,
+        "default grain is too weak: {:.3}/255",
+        defaults.rms
+    );
+    assert!(
+        defaults.bands[4] < defaults.bands[2] * 0.7,
+        "highlights should carry less grain than mids: {:?}",
+        defaults.bands
+    );
+
+    // Preview versus export. Grain below one processing pixel aliases, so this
+    // checks that the overall amplitude stays in the same ballpark rather than
+    // expecting pixel-identical fields.
     let (pw, ph) = (600, 400);
     let (ew, eh) = (1800, 1200);
     let recipe = metric_recipe();
@@ -229,27 +255,36 @@ fn report_grain_metrics() {
         autocorr_half_width(&export_res, pw, ph - 4)
     );
     println!("preview vs downscaled export: mean |diff| = {diff:.3}/255");
+    assert!(
+        diff < 5.0,
+        "preview and downscaled export differ by {diff:.2}/255"
+    );
 }
 
-fn report_recipe(ctx: &GpuContext, renderer: &Renderer, label: &str, recipe: &Recipe) {
+fn report_recipe(ctx: &GpuContext, renderer: &Renderer, label: &str, recipe: &Recipe) -> Report {
     let (w, h) = (600, 400);
     let flat = flat_image(w, h, 128);
     let out = renderer.render(ctx, &flat, recipe, None).unwrap();
     let luma = luma8(&out);
     let flat_residual = residual(&luma, w, 2, h as usize - 2);
-    println!(
-        "{label}: rms = {:.2}/255, autocorr half-width = {:.2} px",
-        rms(&flat_residual),
-        autocorr_half_width(&flat_residual, w, h - 4)
-    );
+    let rms_value = rms(&flat_residual);
+    let half_width = autocorr_half_width(&flat_residual, w, h - 4);
+    println!("{label}: rms = {rms_value:.2}/255, autocorr half-width = {half_width:.2} px");
 
     let wedge = wedge_image(w, h);
     let out = renderer.render(ctx, &wedge, recipe, None).unwrap();
     let wedge_luma = luma8(&out);
+    let mut bands = [0.0; 5];
     for (band, level) in [0.1_f32, 0.3, 0.5, 0.7, 0.9].iter().enumerate() {
         let (band_rms, band_width) = band_metrics(&wedge_luma, w, h, band, 5);
+        bands[band] = band_rms;
         println!(
             "  wedge luma {level:.1}: rms = {band_rms:.2}/255, half-width = {band_width:.2} px"
         );
+    }
+    Report {
+        rms: rms_value,
+        half_width,
+        bands,
     }
 }

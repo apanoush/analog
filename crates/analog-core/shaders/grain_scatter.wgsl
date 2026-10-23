@@ -67,16 +67,27 @@ fn value_noise(p: vec2<f32>, seed: u32) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Three octaves at non-integer ratios. Rotating and offsetting each octave
+// breaks lattice alignment, so the sum does not read as a grid. The finest
+// octave is roughly one third of the cell size, which gives the per-pixel
+// sparkle that smooth two-octave value noise lacks.
 fn fbm(p: vec2<f32>, seed: u32) -> f32 {
     var v = 0.0;
-    var amp = 0.5;
+    var norm = 0.0;
+    var amp = 0.55;
     var q = p;
-    for (var o = 0u; o < 2u; o = o + 1u) {
-        v = v + amp * value_noise(q, seed + o * 101u);
-        q = q * 2.0;
-        amp = amp * 0.5;
+    for (var o = 0u; o < 3u; o = o + 1u) {
+        let a = 0.7 + f32(o) * 1.9;
+        let c = cos(a);
+        let s = sin(a);
+        let r = vec2<f32>(c * q.x - s * q.y, s * q.x + c * q.y);
+        let offset = vec2<f32>(f32(o) * 37.1 + 11.3, f32(o) * 17.9 + 5.7);
+        v = v + amp * value_noise(r + offset, seed + o * 101u);
+        norm = norm + amp;
+        q = q * 1.9;
+        amp = amp * 0.48;
     }
-    return v * (1.0 / 0.75);
+    return v / norm;
 }
 
 //@IMAGE_LOAD
@@ -130,12 +141,12 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let hf = value_noise(uv * 3.0, seed ^ 0x9e3779b9u) - 0.5;
     n = n + vec3<f32>(hf) * (params.fine_grain / 100.0) * 0.5;
 
-    // Dissolution clumps the grain with a low-frequency field. Dust and
-    // scratches are not part of the grain field; structural fusion is handled
-    // separately once it is reimplemented.
-    let clump = fbm(uv * 0.25, seed ^ 0xdeadbeefu);
-    let clump_mod = mix(1.0, clump * 2.0, params.dissolution / 100.0);
-    n = vec3<f32>(0.5) + (n - vec3<f32>(0.5)) * clump_mod;
+    // Dissolution clumps the grain with a low-frequency density field. Even at
+    // zero it leaves a little variation, so the texture does not read as
+    // uniform digital noise.
+    let clump = value_noise(uv * 0.25, seed ^ 0xdeadbeefu) - 0.5;
+    let clump_amount = 0.15 + 0.35 * (params.dissolution / 100.0);
+    n = vec3<f32>(0.5) + (n - vec3<f32>(0.5)) * (1.0 + clump * clump_amount);
 
     // Transparent pixels carry no grain (the image is read for its alpha).
     let alpha = load_image(idx).a;

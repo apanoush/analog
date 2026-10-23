@@ -52,8 +52,10 @@ The grain is a three-stage GPU pipeline (`scatter`, `blur`,
 `apply`), and documented:
 
 - **Noise**: an integer hash (Wellons' lowbias32) over a lattice, bilinearly
-  interpolated, two octaves. Integer hashing is what makes a `grain_seed`
-  reproducible across backends.
+  interpolated. Three octaves at roughly 1, 1.9 and 3.6 times the base
+  frequency are rotated and offset per octave to break lattice alignment. A
+  low-frequency density field adds gentle clumping. Integer hashing is what
+  makes a `grain_seed` reproducible across backends.
 - **Size**: `grain_amount` and `grain_type` set the noise feature size in
   reference pixels at a 3000 px long side (coarse 0.75-6 px, smooth 0.6-6.8 px,
   fine 0.3-3.4 px). Coordinates are normalised to `min(3000, source_long_side)`
