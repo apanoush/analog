@@ -300,6 +300,20 @@ mod tests {
     }
 
     #[test]
+    fn every_stock_renders_and_only_neutral_is_identity() {
+        let Some(ctx) = ctx_or_skip() else { return };
+        let img = color_image(16, 16);
+        for stock in crate::params::ALL_FILM_STOCKS {
+            let out = crate::render::render(&ctx, &img, &film_recipe(stock, 100.0)).unwrap();
+            if stock == FilmStock::Neutral {
+                assert_eq!(out, img, "neutral must be a pass-through");
+            } else {
+                assert_ne!(out, img, "{stock} should change the image");
+            }
+        }
+    }
+
+    #[test]
     fn zero_intensity_is_identity() {
         let Some(ctx) = ctx_or_skip() else { return };
         let img = color_image(32, 32);

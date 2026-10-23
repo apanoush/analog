@@ -1053,3 +1053,124 @@ fn paper_tint_ramp() -> Vec<(f32, Color)> {
         (1.0, rgb(242, 226, 194)),
     ]
 }
+
+#[cfg(test)]
+mod app_tests {
+    use super::*;
+
+    fn test_app() -> Option<App> {
+        if GpuContext::new_blocking().is_err() {
+            eprintln!("skipping GUI test: no GPU");
+            return None;
+        }
+        Some(App::new())
+    }
+
+    fn temp_image() -> (std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("analog-gui-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("in.png");
+        let data: Vec<u8> = (0..32 * 24 * 4)
+            .map(|i| if i % 4 == 3 { 255 } else { (i * 5) as u8 })
+            .collect();
+        Image::from_rgba8(32, 24, data)
+            .unwrap()
+            .encode(&path)
+            .unwrap();
+        (dir, path)
+    }
+
+    #[test]
+    fn view_builds_with_and_without_advanced_sections() {
+        let Some(mut app) = test_app() else { return };
+        let _ = view(&app);
+        app.advanced_grain = true;
+        app.advanced_halation = true;
+        app.advanced_print = true;
+        let _ = view(&app);
+    }
+
+    #[test]
+    fn slider_and_toggle_messages_update_the_recipe() {
+        let Some(mut app) = test_app() else { return };
+        let messages = [
+            Message::GrainIntensity(61.0),
+            Message::GrainAmount(22.0),
+            Message::GrainSoftness(8.0),
+            Message::GrainColor(12.0),
+            Message::GrainColorShift(44.0),
+            Message::GrainFusion(5.0),
+            Message::FineGrain(7.0),
+            Message::LumHighlights(20.0),
+            Message::LumMids(33.0),
+            Message::LumShadows(66.0),
+            Message::GrainType(GrainType::Smooth),
+            Message::Focus(11.0),
+            Message::HalationIntensity(12.0),
+            Message::HalationRadius(13.0),
+            Message::HalationThreshold(170.0),
+            Message::HalationColor(14.0),
+            Message::HalationColorShift(15.0),
+            Message::HalationColorTone(16.0),
+            Message::HalationBackgroundFocus(17.0),
+            Message::HalationBackgroundGain(18.0),
+            Message::LightSpill(19.0),
+            Message::PrintSimulation(21.0),
+            Message::PaperType(PaperType::Matte),
+            Message::PaperIntensity(23.0),
+            Message::HighlightRolloff(24.0),
+            Message::PaperTint(-5.0),
+            Message::FilmIntensity(26.0),
+            Message::FilmStock(FilmStock::KodakPortra400),
+            Message::ToggleGrainAdvanced(true),
+            Message::ToggleHalationAdvanced(true),
+            Message::TogglePrintAdvanced(true),
+            Message::CompareStart,
+            Message::CompareEnd,
+            Message::ViewReset,
+            Message::ViewChanged(view::ViewTransform::fit()),
+            Message::Tick,
+        ];
+        for message in messages {
+            let _ = update(&mut app, message);
+        }
+        assert_eq!(app.recipe.grain.intensity, 61.0);
+        assert_eq!(app.recipe.grain.grain_type, GrainType::Smooth);
+        assert_eq!(app.recipe.halation.halation_threshold, 170.0);
+        assert_eq!(app.recipe.print.print_sim_paper_type, PaperType::Matte);
+        assert_eq!(app.recipe.film.film_stock, FilmStock::KodakPortra400);
+        assert!(app.advanced_grain && app.advanced_halation && app.advanced_print);
+    }
+
+    #[test]
+    fn load_builds_preview_and_depth_reports_update_status() {
+        let Some(mut app) = test_app() else { return };
+        let (dir, path) = temp_image();
+        app.load(&path);
+        assert!(app.source.is_some(), "source should be set");
+        assert!(app.preview_src.is_some(), "preview proxy should be set");
+        assert!(app.preview.is_some(), "preview render should succeed");
+        assert_eq!(app.img_size.width, 32.0);
+
+        let _ = update(&mut app, Message::DepthReady(Err("no model".into())));
+        assert!(app.status.contains("no model"));
+        assert!(!app.depth_pending);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn depth_request_is_ignored_without_a_depth_control() {
+        let Some(mut app) = test_app() else { return };
+        app.recipe.grain.depth_of_field_intensity = 0.0;
+        let _ = app.maybe_request_depth();
+        assert!(app.preview_depth.is_none());
+
+        let (dir, path) = temp_image();
+        app.load(&path);
+        app.recipe.grain.depth_of_field_intensity = 20.0;
+        let _ = app.maybe_request_depth();
+        assert!(app.depth_pending);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

@@ -260,6 +260,40 @@ mod tests {
     }
 
     #[test]
+    fn depth_map_converts_to_an_image() {
+        let map = DepthMap::from_bytes(2, 1, vec![0, 255]).unwrap();
+        let image = map.to_image().unwrap();
+        assert_eq!(image.width(), 2);
+        assert_eq!(image.height(), 1);
+        assert_eq!(image.data(), &[0, 0, 0, 255, 255, 255, 255, 255]);
+    }
+
+    #[test]
+    fn preprocess_packs_nchw_at_model_resolution() {
+        let img = Image::from_rgba8(2, 2, vec![128; 16]).unwrap();
+        let out = preprocess(&img);
+        let n = (INPUT_SIZE * INPUT_SIZE) as usize;
+        assert_eq!(out.len(), n * 3);
+        let expected_r = (128.0 / 255.0 - MEAN[0]) / STD[0];
+        let expected_g = (128.0 / 255.0 - MEAN[1]) / STD[1];
+        let expected_b = (128.0 / 255.0 - MEAN[2]) / STD[2];
+        assert!((out[0] - expected_r).abs() < 1e-6);
+        assert!((out[n] - expected_g).abs() < 1e-6);
+        assert!((out[2 * n] - expected_b).abs() < 1e-6);
+    }
+
+    #[test]
+    fn cache_dir_is_absolute() {
+        assert!(cache_dir().is_absolute());
+    }
+
+    #[test]
+    fn missing_model_file_is_an_error() {
+        let missing = std::env::temp_dir().join("analog-missing-model.onnx");
+        assert!(DepthModel::from_file(&missing).is_err());
+    }
+
+    #[test]
     fn default_path_is_the_cached_model() {
         let path = DepthModel::default_path();
         assert_eq!(path.file_name().unwrap(), MODEL_FILE);
