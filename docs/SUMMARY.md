@@ -14,3 +14,4 @@
 - [0008: Recipe preset format](decisions/0008-recipe-format.md)
 - [0009: Grain type codes and defaults](decisions/0009-grain-type-codes.md)
 - [0010: Resolution-normalised grain](decisions/0010-resolution-normalised-grain.md)
+- [0011: Adaptive grain response and luminance-preserving chroma](decisions/0011-adaptive-grain-response.md)

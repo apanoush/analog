@@ -79,13 +79,16 @@ impl Renderer {
             out = self.film.run(ctx, &out, &recipe.film)?;
         }
         if recipe.grain.intensity > 0.0 {
+            let luma_range = crate::image::luma_range(image);
+            let target =
+                crate::grain::GrainTarget::new(reference_long_side, luma_range.0, luma_range.1);
             out = self.grain.run(
                 ctx,
                 &out,
                 &recipe.grain,
                 recipe.grain_seed,
                 depth_gpu.as_ref(),
-                reference_long_side,
+                target,
             )?;
         }
         if recipe.halation.halation_intensity > 0.0 || recipe.halation.light_spill_intensity > 0.0 {

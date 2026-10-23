@@ -70,6 +70,24 @@ fn luma8(image: &Image) -> Vec<f32> {
         .collect()
 }
 
+/// Mean channel spread per pixel, in 0..255. Zero for a neutral image.
+fn chroma_mean(image: &Image) -> f32 {
+    let pixels = image.data().as_chunks::<4>().0;
+    let sum: f32 = pixels
+        .iter()
+        .map(|p| {
+            let max = p[0].max(p[1]).max(p[2]) as f32;
+            let min = p[0].min(p[1]).min(p[2]) as f32;
+            max - min
+        })
+        .sum();
+    sum / pixels.len() as f32
+}
+
+fn mean_luma(image: &Image) -> f32 {
+    luma8(image).iter().sum::<f32>() / (image.width() * image.height()) as f32
+}
+
 /// Subtract the region mean. On a flat patch every remaining variation is
 /// grain; unlike a local high-pass this keeps large, blurred features.
 fn residual(luma: &[f32], width: u32, y0: usize, y1: usize) -> Vec<f32> {
@@ -258,6 +276,38 @@ fn report_grain_metrics() {
     assert!(
         diff < 5.0,
         "preview and downscaled export differ by {diff:.2}/255"
+    );
+
+    // Chroma: Color 16 must stay subtle and the deviations must not shift
+    // local luminance.
+    let mut low_color = metric_recipe();
+    low_color.grain.grain_color = 16.0;
+    let mut high_color = metric_recipe();
+    high_color.grain.grain_color = 80.0;
+    let low_image = renderer
+        .render(&ctx, &flat_image(pw, ph, 128), &low_color, None)
+        .unwrap();
+    let high_image = renderer
+        .render(&ctx, &flat_image(pw, ph, 128), &high_color, None)
+        .unwrap();
+    let low_chroma = chroma_mean(&low_image);
+    let high_chroma = chroma_mean(&high_image);
+    let luma_shift = (mean_luma(&high_image) - 128.0).abs();
+    println!(
+        "chroma at Color 16 = {low_chroma:.3}/255, at Color 80 = {high_chroma:.3}/255, \
+         luma shift at Color 80 = {luma_shift:.3}/255"
+    );
+    assert!(
+        low_chroma < high_chroma * 0.5,
+        "Color 16 should be much less chromatic than Color 80"
+    );
+    assert!(
+        high_chroma > 0.1,
+        "Color 80 should still produce visible chroma"
+    );
+    assert!(
+        luma_shift < 1.0,
+        "chroma deviations shifted luminance by {luma_shift:.2}/255"
     );
 }
 

@@ -334,6 +334,48 @@ impl Image {
     }
 }
 
+/// The luminance range of an opaque image, in 0..1, using BT.709 weights.
+///
+/// Fully transparent pixels are ignored. A degenerate range falls back to
+/// `(0.0, 1.0)` so the grain zones can still use absolute luminance.
+pub fn luma_range(image: &Image) -> (f32, f32) {
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+
+    match image.format() {
+        PixelFormat::Rgba8 => {
+            for px in image.data.as_chunks::<4>().0 {
+                if px[3] == 0 {
+                    continue;
+                }
+                let luma = 0.2126 * px[0] as f32 + 0.7152 * px[1] as f32 + 0.0722 * px[2] as f32;
+                let luma = luma / 255.0;
+                min = min.min(luma);
+                max = max.max(luma);
+            }
+        }
+        PixelFormat::Rgba16 => {
+            for px in image.data.as_chunks::<8>().0 {
+                let r = u16::from_le_bytes([px[0], px[1]]) as f32 / 65535.0;
+                let g = u16::from_le_bytes([px[2], px[3]]) as f32 / 65535.0;
+                let b = u16::from_le_bytes([px[4], px[5]]) as f32 / 65535.0;
+                let a = u16::from_le_bytes([px[6], px[7]]);
+                if a == 0 {
+                    continue;
+                }
+                let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+                min = min.min(luma);
+                max = max.max(luma);
+            }
+        }
+    }
+
+    if !min.is_finite() || !max.is_finite() || max - min < 0.01 {
+        return (0.0, 1.0);
+    }
+    (min, max)
+}
+
 fn is_16_bit(color: image::ColorType) -> bool {
     use image::ColorType::*;
     matches!(color, L16 | La16 | Rgb16 | Rgba16 | Rgb32F | Rgba32F)
@@ -524,5 +566,35 @@ mod tests {
         assert_eq!(small.format(), PixelFormat::Rgba8);
         let same = Image::from_rgba8(10, 10, vec![0; 10 * 10 * 4]).unwrap();
         assert_eq!(same.thumbnail(40), same);
+    }
+
+    #[test]
+    fn luma_range_ignores_transparent_pixels() {
+        let data = vec![
+            0, 0, 0, 255, // black
+            255, 255, 255, 255, // white
+            0, 0, 0, 0, // transparent, must not widen the range
+        ];
+        let img = Image::from_rgba8(3, 1, data).unwrap();
+        let (min, max) = luma_range(&img);
+        assert!(min.abs() < 1e-6, "min {min}");
+        assert!((max - 1.0).abs() < 1e-6, "max {max}");
+    }
+
+    #[test]
+    fn luma_range_falls_back_for_flat_or_empty_images() {
+        let flat = Image::from_rgba8(2, 1, vec![128; 8]).unwrap();
+        assert_eq!(luma_range(&flat), (0.0, 1.0));
+        let empty = Image::from_rgba8(1, 1, vec![0, 0, 0, 0]).unwrap();
+        assert_eq!(luma_range(&empty), (0.0, 1.0));
+    }
+
+    #[test]
+    fn luma_range_reads_16_bit_samples() {
+        let data = vec![0u16, 0, 0, 65535, 65535, 65535, 65535, 65535];
+        let img = Image::from_rgba16(2, 1, data).unwrap();
+        let (min, max) = luma_range(&img);
+        assert!(min.abs() < 1e-6, "min {min}");
+        assert!((max - 1.0).abs() < 1e-6, "max {max}");
     }
 }

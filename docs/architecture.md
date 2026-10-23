@@ -60,11 +60,15 @@ The grain is a three-stage GPU pipeline (`scatter`, `blur`,
   reference pixels at a 3000 px long side (coarse 0.75-6 px, smooth 0.6-6.8 px,
   fine 0.3-3.4 px). Coordinates are normalised to `min(3000, source_long_side)`
   so a preview proxy can match the full-resolution export at fit.
-- **Zones**: `luminance_shadows/mids/highlights` scale three overlapping
-  smoothstep weights over luma, fading to zero at the deep shadows and near
-  white.
-- **Color**: per-channel noise offsets, blended toward monochrome by
-  `grain_color` and directed by `color_shift`.
+- **Zones**: `luminance_shadows/mids/highlights` weight a partition of unity
+  over the image's adaptive tonal range (`luma_min..luma_max`, computed on the
+  CPU from the input). Shadows own the bottom 30 percent, mids plateau to 55
+  percent, and highlights fade in from 55 to 85 percent. The darkest 15 percent
+  fades toward 0.05, relaxing when Shadows is above neutral.
+- **Color**: a single luminance field plus two opposite offset samples. The
+  channel deviations sum to zero under BT.709 luma, so `grain_color` adds
+  chromatic variation without shifting local brightness. `color_shift` rotates
+  the offset direction.
 - **Softness**: a separable Gaussian (horizontal then vertical) of the 16-bit
   grain field, half-width 1-8 px at the 3000 px reference and scaled by
   the processing size; `roughness` below 5 leaves the field sharp. The

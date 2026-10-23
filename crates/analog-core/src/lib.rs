@@ -26,6 +26,7 @@ pub mod shaders;
 pub use depth::{DepthMap, DepthModel};
 pub use error::{Error, Result};
 pub use gpu::GpuContext;
+pub use grain::GrainTarget;
 pub use halation::tint_rgb;
 pub use image::{Image, PixelFormat};
 pub use params::{

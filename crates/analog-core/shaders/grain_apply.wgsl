@@ -28,8 +28,9 @@ struct Params {
     /// Long side of the source image; kept in the layout shared by the grain
     /// shaders. The apply pass does not need it.
     original_long_side: u32,
-    pad1: u32,
-    pad2: u32,
+    /// Luminance range of the source image, used by the adaptive zones.
+    luma_min: f32,
+    luma_max: f32,
 };
 
 @group(0) @binding(0) var<storage, read> src: array<u32>;
@@ -41,12 +42,34 @@ struct Params {
 
 const LUMA = vec3<f32>(0.2126, 0.7152, 0.0722);
 const GRAIN_GAIN: f32 = 0.22;
+const SHADOW_ZONE_END: f32 = 0.30;
+const HIGHLIGHT_FADE_START: f32 = 0.55;
+const HIGHLIGHT_FADE_END: f32 = 0.85;
+const SHADOW_FADE: f32 = 0.15;
 
-fn zone_weights(l: f32) -> vec3<f32> {
-    let ws = smoothstep(0.05, 0.25, l) * (1.0 - smoothstep(0.25, 0.50, l));
-    let wm = smoothstep(0.25, 0.50, l) * (1.0 - smoothstep(0.55, 0.80, l));
-    let wh = smoothstep(0.55, 0.80, l) * (1.0 - smoothstep(0.85, 0.95, l));
-    return vec3<f32>(ws, wm, wh);
+// Zone weights form a partition of unity over the image's adaptive tonal
+// range: shadows below 0.30, a mids plateau to 0.55, then a fade to pure
+// highlights at 0.85. The darkest 15 percent fades toward 0.05, relaxed when
+// the Shadows slider is above neutral.
+fn zone_multiplier(luma: f32, m_shadows: f32, m_mids: f32, m_highlights: f32) -> f32 {
+    var p = luma;
+    let range = params.luma_max - params.luma_min;
+    if (range >= 0.01) {
+        p = clamp((luma - params.luma_min) / range, 0.0, 1.0);
+    }
+
+    let ws = 1.0 - smoothstep(0.0, SHADOW_ZONE_END, p);
+    let wh = smoothstep(HIGHLIGHT_FADE_START, HIGHLIGHT_FADE_END, p);
+    let wm = max(1.0 - ws - wh, 0.0);
+    var zone = ws * m_shadows + wm * m_mids + wh * m_highlights;
+
+    if (p < SHADOW_FADE) {
+        let fade = smoothstep(0.0, 1.0, p / SHADOW_FADE);
+        let faded = mix(0.05, zone, fade);
+        let relax = clamp(m_shadows - 1.0, 0.0, 1.0);
+        zone = mix(faded, zone, relax);
+    }
+    return max(zone, 0.0);
 }
 
 //@IMAGE_LOAD
@@ -72,9 +95,8 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
     let c = load_image(idx);
 
     let luma = dot(c.rgb, LUMA);
-    let weights = zone_weights(luma);
     let mult = vec3<f32>(params.lum_shadows, params.lum_mids, params.lum_highlights) / 50.0;
-    let zone = dot(weights, mult);
+    let zone = zone_multiplier(luma, mult.x, mult.y, mult.z);
 
     // Focus: 1 in focus (near) uses the sharp field; 0 uses the blurred field.
     var focus = 0.0;

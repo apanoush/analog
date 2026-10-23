@@ -21,6 +21,28 @@ const SOFTNESS_FLOOR: f32 = 5.0;
 /// Long side used to normalise grain size and softness.
 const GRAIN_REFERENCE: f32 = 3000.0;
 
+/// Extra inputs for a grain render.
+#[derive(Debug, Clone, Copy)]
+pub struct GrainTarget {
+    /// Long side of the source image when the render is a proxy. `None` uses
+    /// the processed image's own long side.
+    pub reference_long_side: Option<u32>,
+    /// Source luminance range, used by the adaptive zones.
+    pub luma_min: f32,
+    pub luma_max: f32,
+}
+
+impl GrainTarget {
+    /// Build a target from the processed image and an optional source size.
+    pub fn new(reference_long_side: Option<u32>, luma_min: f32, luma_max: f32) -> Self {
+        Self {
+            reference_long_side,
+            luma_min,
+            luma_max,
+        }
+    }
+}
+
 /// The grain pipeline, reusable across images.
 pub struct GrainPass {
     scatter: ImagePassPair,
@@ -57,7 +79,7 @@ impl GrainPass {
         params: &GrainParams,
         seed: u64,
         depth: Option<&GpuImage>,
-        reference_long_side: Option<u32>,
+        target: GrainTarget,
     ) -> Result<GpuImage> {
         let (w, h) = (image.width(), image.height());
         let depth_intensity = if depth.is_some() {
@@ -74,9 +96,7 @@ impl GrainPass {
             let base = 1.0 + (MAX_BLUR_RADIUS - 1.0) * (params.roughness / 100.0);
             (base * scale).round().clamp(1.0, 20.0) as u32
         };
-        let reference = reference_long_side.unwrap_or(w.max(h));
-
-        let uniform = GrainUniform::new(w, h, params, seed, depth_intensity, radius, reference);
+        let uniform = GrainUniform::new(w, h, params, seed, depth_intensity, radius, target);
         let bytes = uniform.as_bytes();
 
         // 1. Scatter the grain field (16-bit).
@@ -149,8 +169,9 @@ impl GrainUniform {
         seed: u64,
         depth_intensity: f32,
         blur_radius: u32,
-        reference_long_side: u32,
+        target: GrainTarget,
     ) -> Self {
+        let reference = target.reference_long_side.unwrap_or(width.max(height));
         let grain_type = match p.grain_type {
             GrainType::Coarse => 0,
             GrainType::Smooth => 1,
@@ -174,9 +195,9 @@ impl GrainUniform {
             grain_type,
             depth_intensity.to_bits(),
             blur_radius,
-            reference_long_side,
-            0,
-            0,
+            reference,
+            target.luma_min.to_bits(),
+            target.luma_max.to_bits(),
         ])
     }
 
@@ -268,6 +289,20 @@ mod tests {
         let a = crate::render::render(&ctx, &img, &sharp).unwrap();
         let b = crate::render::render(&ctx, &img, &soft).unwrap();
         assert_ne!(a, b, "softness should change the grain");
+    }
+
+    #[test]
+    fn color_shift_changes_chroma_direction() {
+        let Some(ctx) = ctx_or_skip() else { return };
+        let img = sample_image(32, 32);
+        let mut a = recipe_with(80.0, 42);
+        a.grain.grain_color = 100.0;
+        a.grain.color_shift = 0.0;
+        let mut b = a.clone();
+        b.grain.color_shift = 100.0;
+        let out_a = crate::render::render(&ctx, &img, &a).unwrap();
+        let out_b = crate::render::render(&ctx, &img, &b).unwrap();
+        assert_ne!(out_a, out_b, "color shift should rotate the chroma offsets");
     }
 
     #[test]

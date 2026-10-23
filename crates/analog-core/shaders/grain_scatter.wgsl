@@ -28,8 +28,9 @@ struct Params {
     /// Long side of the source image. Grain coordinates are normalised to this
     /// so a 900 px preview matches the full-resolution export at fit.
     original_long_side: u32,
-    pad1: u32,
-    pad2: u32,
+    /// Luminance range of the source image, used by the adaptive zones.
+    luma_min: f32,
+    luma_max: f32,
 };
 
 @group(0) @binding(0) var<storage, read> src: array<u32>;
@@ -132,11 +133,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
 
     let chroma = params.grain_color / 100.0;
     let shift = (params.color_shift - 50.0) / 50.0;
-    let co = vec2<f32>(1.0, 0.0) * shift * 0.5 + vec2<f32>(0.0, 0.37);
+    let angle = 0.6 + shift * 1.2;
+    let dir = vec2<f32>(cos(angle), sin(angle));
+    let off = dir * 0.5;
+
     let ng = fbm(uv, seed);
-    let mono = vec3<f32>(ng);
-    let chroma_noise = vec3<f32>(fbm(uv + co, seed), ng, fbm(uv - co, seed));
-    var n = mix(mono, chroma_noise, chroma);
+    var n = vec3<f32>(ng);
+    if (chroma > 0.0) {
+        // Opposite samples of the same field. The green deviation is chosen so
+        // the three channel deviations sum to zero under BT.709 luma, which
+        // keeps chroma grain from changing local brightness.
+        let d1 = fbm(uv + off, seed) - ng;
+        let d2 = fbm(uv - off, seed) - ng;
+        let dg = -(0.2126 * d1 + 0.0722 * d2) / 0.7152;
+        n = vec3<f32>(ng + d1 * chroma, ng + dg * chroma, ng + d2 * chroma);
+    }
 
     let hf = value_noise(uv * 3.0, seed ^ 0x9e3779b9u) - 0.5;
     n = n + vec3<f32>(hf) * (params.fine_grain / 100.0) * 0.5;
