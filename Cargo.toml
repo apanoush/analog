@@ -7,8 +7,8 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
-edition = "2024"
+version = "0.2.0"
+edition = "2026"
 rust-version = "1.93"
 authors = ["analog contributors"]
 description = "A local-first film grain editor: library, CLI and GUI."
